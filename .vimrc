@@ -1,5 +1,8 @@
 syntax on
 
+" Use local .vimrc
+set exrc
+
 au BufRead,BufNewFile *.py set expandtab
 au BufRead,BufNewFile *.c set noexpandtab
 au BufRead,BufNewFile *.h set noexpandtab

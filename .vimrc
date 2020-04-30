@@ -4,8 +4,10 @@ syntax on
 set exrc
 
 au BufRead,BufNewFile *.py set expandtab
-au BufRead,BufNewFile *.c set noexpandtab
-au BufRead,BufNewFile *.h set noexpandtab
+au BufRead,BufNewFile *.c set expandtab tabstop=2 softtabstop=2 shiftwidth=2
+au BufRead,BufNewFile *.cpp set expandtab tabstop=2 softtabstop=2 shiftwidth=2
+au BufRead,BufNewFile *.cc set expandtab tabstop=2 softtabstop=2 shiftwidth=2
+au BufRead,BufNewFile *.h set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 au BufRead,BufNewFile Makefile* set noexpandtab
 
 set tabstop=4

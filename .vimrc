@@ -4,11 +4,13 @@ syntax on
 set exrc
 
 au BufRead,BufNewFile *.py set expandtab
+au BufRead,BufNewFile *.lua set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 au BufRead,BufNewFile *.c set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 au BufRead,BufNewFile *.cpp set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 au BufRead,BufNewFile *.cc set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 au BufRead,BufNewFile *.h set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 au BufRead,BufNewFile Makefile* set noexpandtab
+au BufRead,BufNewFile *.yaml set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 
 set tabstop=4
 set softtabstop=4
@@ -23,7 +25,7 @@ set backspace=indent,eol,start
 set noundofile
 set textwidth=120
 
-set number relativenumber
+" set number relativenumber
 
 set wildmenu
 set wildmode=longest:full,full
@@ -51,11 +53,11 @@ set encoding=utf-8
 vnoremap <silent> * :<C-u>call VisualSelection('', '')<CR>/<C-R>=@/<CR><CR>
 vnoremap <silent> # :<C-u>call VisualSelection('', '')<CR>?<C-R>=@/<CR><CR>
 
-map <space> /
-map <c-space> ?
+tnoremap <C-h> <C-\><C-n>
 
 " Faster move between windows
 map <C-j> <C-W>j
 map <C-k> <C-W>k
 map <C-h> <C-W>h
 map <C-l> <C-W>l
+

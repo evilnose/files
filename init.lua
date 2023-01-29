@@ -25,23 +25,6 @@ vim.g.neovide_floating_blur_amount_x = 5.0
 vim.g.neovide_floating_blur_amount_y = 5.0
 
 vim.g.fzf_history_dir = '~/.local/share/fzf-history'
--- vim.g.lightline = {
---   colorscheme = 'tokyonight',
---    active = {
---      left = { { 'mode', 'paste' },
---      { 'gitbranch', 'readonly', 'filename', 'modified' },
---      -- { 'cwd' },
---      { 'refresh' },
---    },
---    },
---    component_function = {
---      gitbranch = 'FugitiveHead',
---      refresh = 'what'
---    },
---    component = {
---      cwd='%{getcwd()}',
---    },
--- }
 
 
 -- Help links
@@ -91,8 +74,11 @@ Plug 'emileferreira/nvim-strict'
 
 Plug 'gabrielpoca/replacer.nvim'
 Plug 'levouh/tint.nvim'
+Plug 'beauwilliams/focus.nvim'
 
 vim.call('plug#end')
+
+require("focus").setup({excluded_buftypes = {'help', 'nofile', 'prompt', 'popup', 'terminal'}})
 
 local on_attach = function(client, bufnr)
   -- Enable completion triggered by <c-x><c-o>
@@ -130,7 +116,16 @@ require('lualine').setup{
   options = {
     -- icons_enabled = defined(vim.g.neovide),
     icons_enabled = true,
-  }
+    theme = 'tokyonight',
+  },
+  inactive_sections = {
+    lualine_c = {
+      { 'filename', color = 'StatusLine' }
+    },
+    lualine_x = {
+      { 'location', color = 'StatusLine' }
+    }
+  },
 }
 -- needs to symlink a compile_commands.json at project root
 require("lspconfig").clangd.setup({
@@ -143,7 +138,7 @@ require("lspconfig").clangd.setup({
 })
 
 require("trouble").setup {
-    -- icons = false,
+    -- icons = true,
     -- fold_open = "v", -- icon used for open folds
     -- fold_closed = ">", -- icon used for closed folds
     -- indent_lines = false, -- add an indent guide below the fold icons
@@ -154,7 +149,7 @@ require("trouble").setup {
     --     hint = "hint",
     --     information = "info"
     -- },
-    use_diagnostic_signs = true -- enabling this will use the signs defined in your lsp client
+    -- use_diagnostic_signs = true -- enabling this will use the signs defined in your lsp client
 }
 
 require('nvim-treesitter.configs').setup {
@@ -169,7 +164,7 @@ require('nvim-treesitter.configs').setup {
   auto_install = false,
 
   -- List of parsers to ignore installing (for "all")
-  ignore_install = { "gitignore" },
+  ignore_install = { "javascript", "gitignore" },
 
   ---- If you need to change the installation directory of the parsers (see -> Advanced Setup)
   -- parser_install_dir = "/some/path/to/store/parsers", -- Remember to run
@@ -185,7 +180,6 @@ require('nvim-treesitter.configs').setup {
     -- list of language that will be disabled. These are handled by Neovim right now and will conflict if enabled
     disable = { "gitignore", "c", "lua" },
     -- Or use a function for more flexibility, e.g. to disable slow treesitter highlight for large files
-    -- Note: if you uncomment this it'll override the settings above, since it silently overrides the above field
     -- disable = function(lang, buf)
     --     local max_filesize = 100 * 1024 -- 100 KB
     --     local ok, stats = pcall(vim.loop.fs_stat, vim.api.nvim_buf_get_name(buf))

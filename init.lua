@@ -11,7 +11,6 @@ vim.api.nvim_command [[set noshowmode]]
 
 -- neovide
 vim.opt.guifont = { "", ":h12" }
--- Doesn't work on Mac for now. See https://github.com/neovide/neovide/issues/1675
 -- vim.g.neovide_fullscreen = true
 vim.g.neovide_remember_window_size = true
 vim.g.neovide_input_macos_alt_is_meta = true
@@ -59,16 +58,16 @@ Plug('sainnhe/sonokai', {as='sonokai'})
 
 Plug 'neovim/nvim-lspconfig'
 
--- Plug 'nvim-tree/nvim-web-devicons' -- optional, for file icons
 Plug 'nvim-tree/nvim-tree.lua'
 Plug 'mhinz/vim-startify'
 
 Plug 'nvim-tree/nvim-web-devicons'
+Plug('nvim-treesitter/nvim-treesitter', {['do'] = vim.fn['TSUpdate']})
 
 Plug 'junegunn/fzf'
 Plug 'junegunn/fzf.vim'
 Plug 'numToStr/Comment.nvim'
-Plug('ojroques/vim-oscyank', {branch='main'})
+Plug ('ojroques/vim-oscyank', {branch='main'})
 
 Plug 'kazhala/close-buffers.nvim'
 
@@ -158,7 +157,51 @@ require("trouble").setup {
     use_diagnostic_signs = true -- enabling this will use the signs defined in your lsp client
 }
 
--- empty setup using defaults
+require('nvim-treesitter.configs').setup {
+  -- A list of parser names, or "all"
+  ensure_installed = { "cpp" },
+
+  -- Install parsers synchronously (only applied to `ensure_installed`)
+  sync_install = false,
+
+  -- Automatically install missing parsers when entering buffer
+  -- Recommendation: set to false if you don't have `tree-sitter` CLI installed locally
+  auto_install = false,
+
+  -- List of parsers to ignore installing (for "all")
+  ignore_install = { "gitignore" },
+
+  ---- If you need to change the installation directory of the parsers (see -> Advanced Setup)
+  -- parser_install_dir = "/some/path/to/store/parsers", -- Remember to run
+  -- vim.opt.runtimepath:append("/some/path/to/store/parsers")!
+
+  highlight = {
+    -- `false` will disable the whole extension
+    enable = true,
+
+    -- NOTE: these are the names of the parsers and not the filetype. (for example if you want to
+    -- disable highlighting for the `tex` filetype, you need to include `latex` in this list as this is
+    -- the name of the parser)
+    -- list of language that will be disabled. These are handled by Neovim right now and will conflict if enabled
+    disable = { "gitignore", "c", "lua" },
+    -- Or use a function for more flexibility, e.g. to disable slow treesitter highlight for large files
+    -- Note: if you uncomment this it'll override the settings above, since it silently overrides the above field
+    -- disable = function(lang, buf)
+    --     local max_filesize = 100 * 1024 -- 100 KB
+    --     local ok, stats = pcall(vim.loop.fs_stat, vim.api.nvim_buf_get_name(buf))
+    --     if ok and stats and stats.size > max_filesize then
+    --         return true
+    --     end
+    -- end,
+
+    -- Setting this to true will run `:h syntax` and tree-sitter at the same time.
+    -- Set this to `true` if you depend on 'syntax' being enabled (like for indentation).
+    -- Using this option may slow down your editor, and you may see some duplicate highlights.
+    -- Instead of true it can also be a list of languages
+    additional_vim_regex_highlighting = false,
+  },
+}
+
 require("nvim-tree").setup({
   sync_root_with_cwd = true,
   respect_buf_cwd = true,
@@ -417,12 +460,35 @@ vim.api.nvim_set_keymap(
   { noremap = true }
 )
 
+-- START <M-C> and <M-V> are copy and paste into system clipboard. for non-terminal-based nvim
 vim.api.nvim_set_keymap(
-  "i",
-  "<D-v>",
-  "<esc>\"+pi",
+  "n",
+  "<M-v>",
+  "\"+p",
   { noremap = true }
 )
+
+vim.api.nvim_set_keymap(
+  "i",
+  "<M-v>",
+  "<C-R>+",
+  { noremap = true }
+)
+
+vim.api.nvim_set_keymap(
+  "t",
+  "<M-v>",
+  "<C-\\><C-N>\"+pi",
+  { noremap = true }
+)
+
+vim.api.nvim_set_keymap(
+  "v",
+  "<M-c>",
+  "\"+y",
+  { noremap = true }
+)
+-- END copy and paste
 
 -- when terminal/neovide goes out of focus, dim the current window
 vim.api.nvim_create_autocmd("FocusLost", {
@@ -438,3 +504,4 @@ vim.api.nvim_create_autocmd("FocusGained", {
     require("tint").untint(vim.api.nvim_get_current_win())
   end
 })
+

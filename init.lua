@@ -74,11 +74,12 @@ Plug 'emileferreira/nvim-strict'
 
 Plug 'gabrielpoca/replacer.nvim'
 Plug 'levouh/tint.nvim'
-Plug 'beauwilliams/focus.nvim'
+-- Plug 'beauwilliams/focus.nvim'
+Plug ('akinsho/toggleterm.nvim', {tag= '*'})
 
 vim.call('plug#end')
 
-require("focus").setup({excluded_buftypes = {'help', 'nofile', 'prompt', 'popup', 'terminal'}})
+-- require("focus").setup({excluded_buftypes = {'help', 'nofile', 'prompt', 'popup', 'terminal', 'toggleterm'}})
 
 local on_attach = function(client, bufnr)
   -- Enable completion triggered by <c-x><c-o>
@@ -237,6 +238,11 @@ require('tint').setup({
   tint = -45,
 })
 
+require("toggleterm").setup{
+  start_in_insert = false,
+  shade_terminals = false,
+}
+
 -- vim.opt.termguicolors = true
 require('strict').setup({
   deep_nesting = {
@@ -287,7 +293,7 @@ vim.api.nvim_create_user_command(
 
 vim.api.nvim_set_keymap(
   "n",
-  "<leader>te",
+  "<leader>t",
   ":belowright split<cr><C-w>J:term<cr>:res 15<cr>",
   { noremap = true }
 )
@@ -303,46 +309,22 @@ vim.api.nvim_set_keymap(
 vim.api.nvim_set_keymap(
   "n",
   "<leader>h",
-  ":Buffers<cr>",
-  { noremap = true }
-)
-
--- START Kaonashi specific
-vim.api.nvim_set_keymap(
-  "n",
-  "<leader>lk",
-  ":SLoad kaonashi<cr>",
+  ":Buffers !'term://<cr>",
   { noremap = true }
 )
 
 vim.api.nvim_set_keymap(
   "n",
-  "<leader>lo",
-  ":SLoad otherkn<cr>",
-  { noremap = true }
-)
-
-vim.api.nvim_set_keymap(
-  "n",
-  "<leader>ld",
-  ":SLoad deployment<cr>",
-  { noremap = true }
-)
-
-vim.api.nvim_set_keymap(
-  "n",
-  "<leader><leader>",
+  "<leader>l",
   ":SLoad all<cr>",
   { noremap = true }
 )
 
--- END Kaonashi specific
-
 -- Yank to clipboard, even SSH
 vim.api.nvim_set_keymap(
   "v",
-  "<leader>y",
-  ":OSCYank<CR><cr>",
+  "<leader>o",
+  ":OSCYank<CR>",
   { noremap = true }
 )
 
@@ -353,13 +335,6 @@ vim.api.nvim_set_keymap(
   "n",
   "<leader>g",
   ":GitMessenger<cr>",
-  { noremap = true }
-)
-
-vim.api.nvim_set_keymap(
-  "n",
-  "<leader>t",
-  ":tabnew ",
   { noremap = true }
 )
 
@@ -456,30 +431,44 @@ vim.api.nvim_set_keymap(
 
 -- START <M-C> and <M-V> are copy and paste into system clipboard. for non-terminal-based nvim
 vim.api.nvim_set_keymap(
-  "n",
-  "<M-v>",
-  "\"+p",
+  "i",
+  "<C-V>",
+  "<C-R>+",
   { noremap = true }
 )
 
 vim.api.nvim_set_keymap(
-  "i",
-  "<M-v>",
+  "c",
+  "<C-V>",
   "<C-R>+",
   { noremap = true }
 )
 
 vim.api.nvim_set_keymap(
   "t",
-  "<M-v>",
+  "<C-v>",
   "<C-\\><C-N>\"+pi",
   { noremap = true }
 )
 
 vim.api.nvim_set_keymap(
   "v",
-  "<M-c>",
+  "<leader>y",
   "\"+y",
+  { noremap = true }
+)
+
+vim.api.nvim_set_keymap(
+  "n",
+  "<leader>d",
+  '"+d',
+  { noremap = true }
+)
+
+vim.api.nvim_set_keymap(
+  "n",
+  "<leader>y",
+  '"+y',
   { noremap = true }
 )
 -- END copy and paste
@@ -498,4 +487,14 @@ vim.api.nvim_create_autocmd("FocusGained", {
     require("tint").untint(vim.api.nvim_get_current_win())
   end
 })
+
+function ReloadInit()
+  vim.cmd('source '..vim.fn.stdpath('config')..'/init.lua')
+end
+vim.api.nvim_create_user_command('ReloadInit', 'lua ReloadInit()', {})
+vim.cmd("sign define DiagnosticSignError text= texthl=DiagnosticError")
+vim.cmd("sign define DiagnosticSignWarn text= texthl=DiagnosticWarn")
+vim.cmd("sign define DiagnosticSignInfo text= texthl=DiagnosticInfo")
+vim.cmd("sign define DiagnosticSignHint text= texthl=DiagnosticHint")
+vim.api.nvim_command [[set signcolumn=yes]]
 

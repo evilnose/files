@@ -1,0 +1,15 @@
+#!/bin/bash
+
+SSH_HOST=<your ssh host>
+
+if ssh cof-dev-l844 'pgrep -f "nvim --headless --listen localhost:6666"' &> /dev/null
+then
+echo 'Nvim already running on server'
+else
+echo 'Not running'
+ssh -L 6666:localhost:6666 $SSH_HOST nvim --headless --listen localhost:6666 &> /dev/null &
+echo 'Nvim started on server'
+sleep 1
+fi
+neovide --multigrid --remote-tcp=localhost:6666 --log
+

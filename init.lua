@@ -198,22 +198,22 @@ require('nvim-treesitter.configs').setup {
 }
 
 require("nvim-tree").setup({
-  sync_root_with_cwd = true,
-  respect_buf_cwd = true,
-  update_focused_file = {
-    enable = true,
-    update_root = true
-  },
-  renderer = {
-    icons = {
-      show = {
-        file = false,
-        folder = false,
-        folder_arrow = false,
-        git = false,
-      },
-    },
-  }
+  -- sync_root_with_cwd = true,
+  -- respect_buf_cwd = true,
+  -- update_focused_file = {
+  --   enable = true,
+  --   update_root = true
+  -- },
+  -- renderer = {
+  --   icons = {
+  --     show = {
+  --       file = false,
+  --       folder = false,
+  --       folder_arrow = false,
+  --       git = false,
+  --     },
+  --   },
+  -- }
 })
 
 require('tabline').setup({
@@ -309,7 +309,7 @@ vim.api.nvim_set_keymap(
 vim.api.nvim_set_keymap(
   "n",
   "<leader>h",
-  ":Buffers !'term://<cr>",
+  ":Buffers <cr>!'term:// ",
   { noremap = true }
 )
 
@@ -317,14 +317,6 @@ vim.api.nvim_set_keymap(
   "n",
   "<leader>l",
   ":SLoad all<cr>",
-  { noremap = true }
-)
-
--- Yank to clipboard, even SSH
-vim.api.nvim_set_keymap(
-  "v",
-  "<leader>o",
-  ":OSCYank<CR>",
   { noremap = true }
 )
 
@@ -347,7 +339,7 @@ vim.api.nvim_set_keymap(
 
 vim.api.nvim_set_keymap(
   "n",
-  "<leader>p",
+  "<leader>o",
   ":Files<cr>",
   { noremap = true }
 )
@@ -429,7 +421,31 @@ vim.api.nvim_set_keymap(
   { noremap = true }
 )
 
--- START <M-C> and <M-V> are copy and paste into system clipboard. for non-terminal-based nvim
+-- Yank to clipboard, even SSH/tmux
+vim.api.nvim_set_keymap(
+  "v",
+  "<leader>Y",
+  ":OSCYank<CR>",
+  { noremap = true }
+)
+
+--- START yanking and pasting using clipboard, for GUI vims
+-- normal and visual mode <leader> + p paste
+vim.api.nvim_set_keymap(
+  "n",
+  "<leader>p",
+  '"+p',
+  { noremap = true }
+)
+
+vim.api.nvim_set_keymap(
+  "v",
+  "<leader>p",
+  '"+p',
+  { noremap = true }
+)
+
+-- insert, visual, and terminal mode ctrl+V paste
 vim.api.nvim_set_keymap(
   "i",
   "<C-V>",
@@ -451,10 +467,11 @@ vim.api.nvim_set_keymap(
   { noremap = true }
 )
 
+-- normal and visual mode yank and delete
 vim.api.nvim_set_keymap(
-  "v",
+  "n",
   "<leader>y",
-  "\"+y",
+  '"+y',
   { noremap = true }
 )
 
@@ -466,12 +483,39 @@ vim.api.nvim_set_keymap(
 )
 
 vim.api.nvim_set_keymap(
-  "n",
+  "v",
   "<leader>y",
-  '"+y',
+  "\"+y",
   { noremap = true }
 )
--- END copy and paste
+
+vim.api.nvim_set_keymap(
+  "v",
+  "<leader>d",
+  '"+d',
+  { noremap = true }
+)
+--- END copy and paste
+
+vim.api.nvim_set_keymap(
+  "n",
+  "<leader>e",
+  ':NvimTreeToggle<CR>',
+  { noremap = true }
+)
+
+-- window management
+vim.api.nvim_set_keymap("n", "<leader>sv", "<C-w>v", { noremap = true }) -- split window vertically
+vim.api.nvim_set_keymap("n", "<leader>sh", "<C-w>s", { noremap = true }) -- split window horizontally
+vim.api.nvim_set_keymap("n", "<leader>se", "<C-w>=", { noremap = true }) -- make split windows equal width & height
+vim.api.nvim_set_keymap("n", "<leader>x", ":close<CR>", { noremap = true }) -- close current window
+
+-- single-char delete and sub should not pollute registers
+vim.api.nvim_set_keymap("n", "x", '"_x', { noremap = true })
+vim.api.nvim_set_keymap("n", "s", '"_s', { noremap = true })
+
+
+vim.api.nvim_set_keymap("n", "<leader>nh", ":nohl<CR>", { noremap = true })
 
 -- when terminal/neovide goes out of focus, dim the current window
 vim.api.nvim_create_autocmd("FocusLost", {

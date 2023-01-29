@@ -11,6 +11,7 @@ au BufRead,BufNewFile *.cc set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 au BufRead,BufNewFile *.h set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 au BufRead,BufNewFile Makefile* set noexpandtab
 au BufRead,BufNewFile *.yaml set expandtab tabstop=2 softtabstop=2 shiftwidth=2
+au BufRead,BufNewFile *.rs set expandtab tabstop=2 softtabstop=2 shiftwidth=2
 
 set tabstop=4
 set softtabstop=4
@@ -68,6 +69,6 @@ if has('unix')
     let data_dir = has('nvim') ? stdpath('data') . '/site' : '~/.vim'
     if empty(glob(data_dir . '/autoload/plug.vim'))
       silent execute '!curl -fLo '.data_dir.'/autoload/plug.vim --create-dirs  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
-      autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
     endif
 endif
+

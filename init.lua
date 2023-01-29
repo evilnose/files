@@ -11,6 +11,7 @@ vim.api.nvim_command [[set noshowmode]]
 
 -- neovide
 vim.opt.guifont = { "", ":h12" }
+-- Doesn't work on Mac for now. See https://github.com/neovide/neovide/issues/1675
 -- vim.g.neovide_fullscreen = true
 vim.g.neovide_remember_window_size = true
 vim.g.neovide_input_macos_alt_is_meta = true

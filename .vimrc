@@ -47,6 +47,9 @@ set novisualbell
 set t_vb=
 set tm=500
 
+set splitbelow
+set splitright
+
 set encoding=utf-8
 
 " In visual mode, pressing * or # searches for the current selection
@@ -62,9 +65,9 @@ map <C-h> <C-W>h
 map <C-l> <C-W>l
 
 if has('unix')
-let data_dir = has('nvim') ? stdpath('data') . '/site' : '~/.vim'
-if empty(glob(data_dir . '/autoload/plug.vim'))
-  silent execute '!curl -fLo '.data_dir.'/autoload/plug.vim --create-dirs  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
-  autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
-endif
+    let data_dir = has('nvim') ? stdpath('data') . '/site' : '~/.vim'
+    if empty(glob(data_dir . '/autoload/plug.vim'))
+      silent execute '!curl -fLo '.data_dir.'/autoload/plug.vim --create-dirs  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+      autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
+    endif
 endif

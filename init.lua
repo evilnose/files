@@ -55,6 +55,7 @@ Plug ('ojroques/vim-oscyank', {branch='main'})
 Plug 'kazhala/close-buffers.nvim'
 
 Plug 'crispgm/nvim-tabline'
+Plug 'szw/vim-maximizer'
 
 -- not needed if lsp is configured:
 -- Plug 'ludovicchabant/vim-gutentags'
@@ -217,10 +218,10 @@ require("nvim-tree").setup({
 })
 
 require('tabline').setup({
-    show_index = true,        -- show tab index
-    show_modify = true,       -- show buffer modification indicator
-    modify_indicator = '[+]', -- modify indicator
-    no_name = '[No name]',    -- no name buffer name
+  show_index = true,        -- show tab index
+  show_modify = true,       -- show buffer modification indicator
+  modify_indicator = '[+]', -- modify indicator
+  no_name = '[No name]',    -- no name buffer name
 })
 
 require('Comment').setup()
@@ -446,6 +447,7 @@ vim.api.nvim_set_keymap(
 )
 
 -- insert, visual, and terminal mode ctrl+V paste
+-- (M+V for terminal to not clash with fzf V-split
 vim.api.nvim_set_keymap(
   "i",
   "<C-V>",
@@ -462,7 +464,7 @@ vim.api.nvim_set_keymap(
 
 vim.api.nvim_set_keymap(
   "t",
-  "<C-v>",
+  "<M-v>",
   "<C-\\><C-N>\"+pi",
   { noremap = true }
 )
@@ -508,6 +510,7 @@ vim.api.nvim_set_keymap(
 vim.api.nvim_set_keymap("n", "<leader>sv", "<C-w>v", { noremap = true }) -- split window vertically
 vim.api.nvim_set_keymap("n", "<leader>sh", "<C-w>s", { noremap = true }) -- split window horizontally
 vim.api.nvim_set_keymap("n", "<leader>se", "<C-w>=", { noremap = true }) -- make split windows equal width & height
+vim.api.nvim_set_keymap("n", "<leader>sm", ":MaximizerToggle<CR>", { noremap = true }) -- make split windows equal width & height
 vim.api.nvim_set_keymap("n", "<leader>x", ":close<CR>", { noremap = true }) -- close current window
 
 -- single-char delete and sub should not pollute registers

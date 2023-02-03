@@ -31,6 +31,8 @@ set textwidth=120
 set wildmenu
 set wildmode=longest:full,full
 
+set termguicolors
+
 set ruler
 
 set hidden
@@ -52,6 +54,8 @@ set splitbelow
 set splitright
 
 set encoding=utf-8
+
+set cursorline
 
 " In visual mode, pressing * or # searches for the current selection
 vnoremap <silent> * :<C-u>call VisualSelection('', '')<CR>/<C-R>=@/<CR><CR>

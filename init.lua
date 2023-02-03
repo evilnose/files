@@ -78,6 +78,10 @@ Plug 'levouh/tint.nvim'
 -- Plug 'beauwilliams/focus.nvim'
 Plug ('akinsho/toggleterm.nvim', {tag= '*'})
 
+-- if COQdeps is having SSL errors trying to install from github, need to add codeload.github.com (and maybe
+-- github.com?) as trusted host, in ~/.config/pip/pip.conf:
+-- [global]
+-- trusted-host = codeload.github.com github.com
 Plug ('ms-jpq/coq_nvim', {branch= 'coq'})
 
 Plug 'williamboman/mason.nvim'

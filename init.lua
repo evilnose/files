@@ -20,11 +20,19 @@ vim.g.neovide_cursor_vfx_mode = ""
 
 vim.opt.winblend = 10
 vim.opt.pumblend = 10
+vim.opt.cursorline = true
 vim.g.neovide_floating_blur = true
 vim.g.neovide_floating_blur_amount_x = 5.0
 vim.g.neovide_floating_blur_amount_y = 5.0
 
 vim.g.fzf_history_dir = '~/.local/share/fzf-history'
+
+vim.g.coq_settings = {
+  keymap = {
+    jump_to_mark = '',
+  },
+  auto_start = 'shut-up'
+}
 
 
 -- Help links
@@ -46,6 +54,7 @@ Plug 'mhinz/vim-startify'
 
 Plug 'nvim-tree/nvim-web-devicons'
 Plug('nvim-treesitter/nvim-treesitter', {['do'] = vim.fn['TSUpdate']})
+Plug 'nvim-treesitter/nvim-treesitter-context'
 
 Plug 'junegunn/fzf'
 Plug 'junegunn/fzf.vim'
@@ -78,21 +87,35 @@ Plug 'levouh/tint.nvim'
 -- Plug 'beauwilliams/focus.nvim'
 Plug ('akinsho/toggleterm.nvim', {tag= '*'})
 
--- if COQdeps is having SSL errors trying to install from github, need to add codeload.github.com (and maybe
--- github.com?) as trusted host, in ~/.config/pip/pip.conf:
--- [global]
--- trusted-host = codeload.github.com github.com
+Plug 'ray-x/lsp_signature.nvim'
 Plug ('ms-jpq/coq_nvim', {branch= 'coq'})
 
 Plug 'williamboman/mason.nvim'
 Plug 'williamboman/mason-lspconfig.nvim'
 
 Plug 'simrat39/rust-tools.nvim'
+Plug 'ggandor/leap.nvim'
 
 
 vim.call('plug#end')
 
--- require("focus").setup({excluded_buftypes = {'help', 'nofile', 'prompt', 'popup', 'terminal', 'toggleterm'}})
+require('lualine').setup{
+  options = {
+    icons_enabled = true,
+    theme = 'tokyonight',
+  },
+  inactive_sections = {
+    lualine_c = {
+      { 'filename', color = 'StatusLine' }
+    },
+    lualine_x = {
+      { 'location', color = 'StatusLine' }
+    }
+  },
+}
+
+require("mason").setup()
+require("mason-lspconfig").setup()
 
 local on_attach = function(client, bufnr)
   -- Enable completion triggered by <c-x><c-o>
@@ -120,29 +143,21 @@ local on_attach = function(client, bufnr)
   vim.keymap.set('n', '<leader>d[', '<cmd>lua vim.diagnostic.goto_prev()<CR>', { noremap = true, silent = true })
   vim.keymap.set('n', '<leader>d]', '<cmd>lua vim.diagnostic.goto_next()<CR>', { noremap = true, silent = true })
   vim.keymap.set('n', '<leader>dd', '<cmd>lua vim.diagnostic.setloclist()<CR>', { noremap = true, silent = true })
-end
 
-require('lualine').setup{
-  options = {
-    icons_enabled = true,
-    theme = 'tokyonight',
-  },
-  inactive_sections = {
-    lualine_c = {
-      { 'filename', color = 'StatusLine' }
-    },
-    lualine_x = {
-      { 'location', color = 'StatusLine' }
+  require "lsp_signature".on_attach({
+    bind = true, -- This is mandatory, otherwise border config won't get registered.
+    handler_opts = {
+      border = "rounded"
     }
-  },
-}
-
-require("mason").setup()
-require("mason-lspconfig").setup()
+  }, bufnr)
+end
 
 -- needs to symlink a compile_commands.json at project root
 local lsp = require('lspconfig')
+require('lsp_signature').setup()
 local coq = require('coq')
+-- note: coq must be set-up before clangd, otherwise go-to definition won't work
+lsp.clangd.setup(coq.lsp_ensure_capabilities())
 lsp.clangd.setup({
   cmd = {
     "clangd",
@@ -151,7 +166,6 @@ lsp.clangd.setup({
   },
   on_attach = on_attach
 })
-lsp.clangd.setup(coq.lsp_ensure_capabilities())
 
 require('rust-tools').setup()
 
@@ -197,15 +211,15 @@ require('nvim-treesitter.configs').setup {
     -- disable highlighting for the `tex` filetype, you need to include `latex` in this list as this is
     -- the name of the parser)
     -- list of language that will be disabled. These are handled by Neovim right now and will conflict if enabled
-    disable = { "gitignore", "c" },
+    -- disable = { "gitignore", "c" },
     -- Or use a function for more flexibility, e.g. to disable slow treesitter highlight for large files
-    -- disable = function(lang, buf)
-    --     local max_filesize = 100 * 1024 -- 100 KB
-    --     local ok, stats = pcall(vim.loop.fs_stat, vim.api.nvim_buf_get_name(buf))
-    --     if ok and stats and stats.size > max_filesize then
-    --         return true
-    --     end
-    -- end,
+    disable = function(lang, bufnr)
+        if vim.api.nvim_buf_line_count(bufnr) > 50000 then
+          return true
+        end
+
+        return lang == "c" or lang == "gitignore"
+    end,
 
     -- Setting this to true will run `:h syntax` and tree-sitter at the same time.
     -- Set this to `true` if you depend on 'syntax' being enabled (like for indentation).
@@ -215,24 +229,23 @@ require('nvim-treesitter.configs').setup {
   },
 }
 
-require("nvim-tree").setup({
-  -- sync_root_with_cwd = true,
-  -- respect_buf_cwd = true,
-  -- update_focused_file = {
-  --   enable = true,
-  --   update_root = true
-  -- },
-  -- renderer = {
-  --   icons = {
-  --     show = {
-  --       file = false,
-  --       folder = false,
-  --       folder_arrow = false,
-  --       git = false,
-  --     },
-  --   },
-  -- }
-})
+require('treesitter-context').setup {
+  patterns = {
+    default = {
+      'class',
+      'function',
+      'method',
+      -- 'for',
+      -- 'while',
+      -- 'if',
+      -- 'switch',
+      -- 'case',
+      'interface',
+      'struct',
+      'enum',
+    },
+  }
+}
 
 require('tabline').setup({
   show_index = true,        -- show tab index
@@ -301,6 +314,8 @@ require('strict').setup({
       highlight_group = 'DiffAdd'
   }
 })
+
+-- require('leap').add_default_mappings()
 
 vim.api.nvim_set_keymap('n', '<Leader>r', ':lua require("replacer").run()<cr>', { nowait = true, noremap = true, silent = true })
 vim.api.nvim_create_user_command(
@@ -534,8 +549,9 @@ vim.api.nvim_set_keymap("n", "<leader>x", ":close<CR>", { noremap = true }) -- c
 vim.api.nvim_set_keymap("n", "x", '"_x', { noremap = true })
 vim.api.nvim_set_keymap("n", "s", '"_s', { noremap = true })
 
--- neovide sends escape sequence in terminal for <S-space> if it's not mapped
+-- neovim sends escape sequence in terminal for <S-space> if it's not mapped
 vim.api.nvim_set_keymap("t", "<S-space>", '<space>', { noremap = true })
+vim.api.nvim_set_keymap("t", "<S-BS>", '<BS>', { noremap = true })
 
 
 vim.api.nvim_set_keymap("n", "<leader>no", ":nohl<CR>", { noremap = true })

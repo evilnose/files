@@ -10,7 +10,7 @@ vim.g.startify_session_before_save = {'BDelete! hidden'}
 vim.api.nvim_command [[set noshowmode]]
 
 -- neovide
-vim.opt.guifont = { "", ":h12" }
+vim.opt.guifont = { "", ":h10" }
 -- vim.g.neovide_fullscreen = true
 vim.g.neovide_remember_window_size = true
 vim.g.neovide_input_macos_alt_is_meta = true
@@ -167,23 +167,13 @@ lsp.clangd.setup({
   on_attach = on_attach
 })
 
-require('rust-tools').setup()
-
-
-require("trouble").setup {
-    -- icons = true,
-    -- fold_open = "v", -- icon used for open folds
-    -- fold_closed = ">", -- icon used for closed folds
-    -- indent_lines = false, -- add an indent guide below the fold icons
-    -- signs = {
-    --     -- icons / text used for a diagnostic
-    --     error = "error",
-    --     warning = "warn",
-    --     hint = "hint",
-    --     information = "info"
-    -- },
-    -- use_diagnostic_signs = true -- enabling this will use the signs defined in your lsp client
+require('rust-tools').setup {
+  server = {
+    on_attach = on_attach,
+  },
 }
+
+require("trouble").setup {}
 
 require('nvim-treesitter.configs').setup {
   -- A list of parser names, or "all"
@@ -583,6 +573,7 @@ vim.api.nvim_create_user_command('ReloadInit',
     vim.cmd('source '..vim.fn.stdpath('config')..'/init.lua')
   end, {nargs=0})
 
+-- usage: :SetFont 8
 vim.api.nvim_create_user_command('SetFont',
   function(opts)
     vim.opt.guifont = { "", ":h"..tostring(opts.args) }

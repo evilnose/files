@@ -4,7 +4,7 @@ Put .vimrc and init.lua in the neovim config directory. Has neovide config in in
 # Prereqs
 * Need to rename `<neovim install dir>/lib/nvim/parser` to something else, otherwise it'll conflict with Treesitter
 * Need to install `ripgrep` for global search
-* Need to install `clangd` for C++ lsp
+* Need to install `clangd` for C++ lsp (this can be done via `:Mason`)
 * Need git installed for tree-sitter
 
 # Notes

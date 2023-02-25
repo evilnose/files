@@ -1,12 +1,9 @@
 # Do
 Put .vimrc and init.lua in the neovim config directory. Has neovide config in init.lua as well.
 
-# Caution
-Don't enable treesitter for C, lua, or .gitignore. C and lua tree-sitter integration comes with vim 8.0 so there'd be
-conflict. .gitignore has some unknown problems I forgot.
-
 # Prereqs
-* Need to install `rg` for global search
+* Need to rename `<neovim install dir>/lib/nvim/parser` to something else, otherwise it'll conflict with Treesitter
+* Need to install `ripgrep` for global search
 * Need to install `clangd` for C++ lsp
 * Need git installed for tree-sitter
 

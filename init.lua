@@ -363,7 +363,7 @@ vim.api.nvim_set_keymap(
 vim.api.nvim_set_keymap(
   "n",
   "<leader>o",
-  ":GFiles<cr>",
+  ":GFiles -o -c --exclude-standard<cr>",
   { noremap = true }
 )
 

@@ -53,6 +53,9 @@ p{margin:0}
 .btn:focus-visible,#clip:focus-visible+label{outline:3px solid var(--t1);outline-offset:2px}
 .btn[hidden]{display:none}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.sens{display:flex;align-items:center;gap:8px;flex:1 1 200px;font-size:13px;color:var(--muted)}
+.sens input{flex:1;min-width:110px;accent-color:var(--btn)}
+.sens input:focus-visible{outline:3px solid var(--t1);outline-offset:2px}
 .meter{flex:1 1 90px;min-width:70px;height:6px;border-radius:3px;background:var(--grid);overflow:hidden}
 .meter i{display:block;height:100%;width:0;background:var(--muted)}
 .status{color:var(--muted);font-size:13px;margin-top:8px;min-height:1.4em}
@@ -97,6 +100,7 @@ ul.notes{margin:0;padding-left:18px;color:var(--muted);font-size:13px;max-width:
       <input class="vh" id="clip" type="file" accept="audio/*,video/*">
       <label class="btn ghost" for="clip" id="clipLabel">Use a recording</label>
       <button class="btn ghost" id="recal" type="button">Reset voice range</button>
+      <div class="sens"><label for="sens">Sensitivity</label><input id="sens" type="range" min="0" max="100" step="5" value="50"></div>
       <div class="meter" aria-hidden="true"><i id="lvl"></i></div>
     </div>
     <p class="status" id="status" aria-live="polite"></p>
@@ -116,6 +120,7 @@ ul.notes{margin:0;padding-left:18px;color:var(--muted);font-size:13px;max-width:
     <li>Height is pitch relative to your own voice: 1 is the bottom of your range, 5 is the top. The page learns your range as you talk.</li>
     <li>The line is measured. The tone label on each syllable is a guess from the shape of the line.</li>
     <li>Pitch is tracked with the raw autocorrelation method from Praat (Boersma 1993), using Praat's standard thresholds.</li>
+    <li>Sensitivity applies to the live microphone. Lower it if lines appear when nobody is speaking; raise it if a quiet voice is missed.</li>
     <li>Leave a short pause between syllables to get one label per syllable. Run-together speech shows as one long line.</li>
   </ul>
 </main>
@@ -156,7 +161,7 @@ const Core=(()=>{
     return out;
   }
   /* Strength of the "no voice here" option for a frame, given its peak and the loudest peak heard. */
-  const unvoiced=(peak,gpk)=>VT+Math.max(0,2-(gpk>0?peak/gpk:0)/(ST/(1+VT)));
+  const unvoiced=(peak,gpk,vt=VT,st=ST)=>vt+Math.max(0,2-(gpk>0?peak/gpk:0)/(st/(1+vt)));
 
   /* Cheapest path through the candidates over time (Viterbi). lag = frames of look-ahead before deciding. */
   class Path{
@@ -220,7 +225,7 @@ const Core=(()=>{
 
   /* Groups voiced frames into syllables: a syllable ends at a silent gap or a pitch jump. */
   class Segmenter{
-    constructor(getRange,onDone){this.getRange=getRange;this.onDone=onDone;this.segs=[];this.cur=null}
+    constructor(getRange,onDone){this.getRange=getRange;this.onDone=onDone;this.segs=[];this.cur=null;this.minDur=MIN_DUR}
     push(t,st){
       const c=this.cur;
       if(st==null){if(c&&t-c.tEnd>GAP)this.finish();return}
@@ -230,7 +235,7 @@ const Core=(()=>{
     }
     finish(){
       const c=this.cur;this.cur=null;if(!c)return;
-      if(c.tEnd-c.t0<MIN_DUR||c.pts.length<3){this.segs.splice(this.segs.indexOf(c),1);return}
+      if(c.tEnd-c.t0<this.minDur||c.pts.length<3){this.segs.splice(this.segs.indexOf(c),1);return}
       const r=this.getRange();c.tone=classify(c.pts,r.lo,r.hi);c.lo=r.lo;c.hi=r.hi;
       if(this.onDone)this.onDone(c);
     }
@@ -277,7 +282,7 @@ if(typeof module!=='undefined')module.exports=Core;
   let R=Core.calcRange([]),Rt=R;         // displayed range, target range
   let hist=[],sinceRange=0;
   let view={t0:0,t1:4.4};
-  let seg=null,ac=null,an=null,stream=null,buf=null,tStart=0,raf=0,noise=null,gpk=0,lastT=0,path=null,saved=null;
+  let seg=null,ac=null,an=null,stream=null,buf=null,tStart=0,raf=0,noise=null,gpk=0,lastT=0,path=null,saved=null,sens=0.5;
   let C={},dpr=1,fontBody='sans-serif';
 
   /* ---------- colors and sizing ---------- */
@@ -366,6 +371,7 @@ if(typeof module!=='undefined')module.exports=Core;
   /* ---------- state ---------- */
   function newSegmenter(){
     seg=new Core.Segmenter(()=>Rt,s=>{addHist(s);markRef(s.tone)});
+    if(mode==='live')seg.minDur=0.08-0.04*sens;
   }
   function clearAll(title){
     hist=[];sinceRange=0;R=Rt=Core.calcRange([]);newSegmenter();
@@ -391,7 +397,7 @@ if(typeof module!=='undefined')module.exports=Core;
   async function startLive(){
     let st;
     try{
-      st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});
+      st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     }catch(e){
       status('The browser refused the microphone ('+(e&&e.name||'error')+'). Allow it in the site settings and press Start again, or use a recording.');
       return;
@@ -402,7 +408,7 @@ if(typeof module!=='undefined')module.exports=Core;
     an=ac.createAnalyser();an.fftSize=ac.sampleRate>=32000?2048:1024;an.smoothingTimeConstant=0;
     ac.createMediaStreamSource(stream).connect(an);
     buf=new Float32Array(an.fftSize);
-    clearAll('Recent syllables');setTag('Live');mode='live';noise=null;gpk=0;lastT=0;path=new Core.Path(3);if(saved){R=Rt=saved;showRange()}tStart=performance.now()/1000;
+    mode='live';clearAll('Recent syllables');setTag('Live');noise=null;gpk=0;lastT=0;path=new Core.Path(3);if(saved){R=Rt=saved;showRange()}tStart=performance.now()/1000;
     $('start').hidden=true;$('stop').hidden=false;
     status('Listening. Say a few words so the page learns your range, then try single syllables.');
     raf=requestAnimationFrame(tick);
@@ -432,12 +438,12 @@ if(typeof module!=='undefined')module.exports=Core;
     if(mode!=='live')return;
     an.getFloatTimeDomainData(buf);
     const c=Core.candidates(buf,ac.sampleRate),t=performance.now()/1000-tStart;
-    const gate=noise==null?0.0005:Math.max(0.0005,noise*2.2);
+    const floor=0.004*Math.pow(10,-sens),gate=noise==null?floor:Math.max(floor,noise*(5.5-4*sens));
     noise=noise==null?c.rms:(c.rms<noise?noise*0.9+c.rms*0.1:noise*1.0005+1e-7);
     if(c.rms<gate)c.cands=[];
     gpk=Math.max(c.peak,gpk*0.9995);
     $('lvl').style.width=clamp((20*Math.log10(c.rms+1e-9)+75)/60*100,0,100)+'%';
-    const o=path.push(t,c.cands,Core.unvoiced(c.peak,gpk),t-lastT);lastT=t;
+    const o=path.push(t,c.cands,Core.unvoiced(c.peak,gpk,0.6-0.2*sens,0.09-0.08*sens),t-lastT);lastT=t;
     if(o)feed(o);
     R={lo:R.lo+(Rt.lo-R.lo)*0.12,hi:R.hi+(Rt.hi-R.hi)*0.12};
     view={t0:t-5,t1:t};seg.prune(t-6);
@@ -469,6 +475,13 @@ if(typeof module!=='undefined')module.exports=Core;
   /* ---------- wiring ---------- */
   const KEY='tone-visualizer-range';
   try{const v=JSON.parse(localStorage.getItem(KEY));if(v&&isFinite(v.lo)&&isFinite(v.hi)&&v.hi-v.lo>=8)saved={lo:v.lo,hi:v.hi}}catch(e){}
+  const SKEY='tone-visualizer-sens';
+  try{const v=parseFloat(localStorage.getItem(SKEY));if(v>=0&&v<=1)sens=v}catch(e){}
+  $('sens').value=Math.round(sens*100);
+  $('sens').addEventListener('input',e=>{
+    sens=e.target.value/100;try{localStorage.setItem(SKEY,String(sens))}catch(err){}
+    if(mode==='live'&&seg)seg.minDur=0.08-0.04*sens;
+  });
   let inFrame=true;try{inFrame=window.self!==window.top}catch(e){}
   const micOK=!inFrame&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
   readTokens();buildRef();demo();

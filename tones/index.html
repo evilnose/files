@@ -143,6 +143,7 @@ const Core=(()=>{
     }
     let tau=-1;
     for(let t=tMin;t<tMax;t++){if(d[t]<TH){while(t+1<tMax&&d[t+1]<d[t])t++;tau=t;break}}
+    if(tau<0){let best=tMin;for(let t=tMin;t<tMax;t++)if(d[t]<d[best])best=t;if(d[best]<0.3&&best>tMin)tau=best}
     if(tau<0)return{f0:0,rms};
     const a=d[tau-1],b=d[tau],c=d[tau+1],den=a-2*b+c;
     return{f0:fs/(den?tau+(a-c)/(2*den):tau),rms};
@@ -239,7 +240,7 @@ if(typeof module!=='undefined')module.exports=Core;
   let R=Core.calcRange([]),Rt=R;         // displayed range, target range
   let hist=[],sinceRange=0;
   let view={t0:0,t1:4.4};
-  let seg=null,ac=null,an=null,stream=null,buf=null,tStart=0,q=[],raf=0;
+  let seg=null,ac=null,an=null,stream=null,buf=null,tStart=0,q=[],raf=0,noise=null;
   let C={},dpr=1,fontBody='sans-serif';
 
   /* ---------- colors and sizing ---------- */
@@ -275,7 +276,7 @@ if(typeof module!=='undefined')module.exports=Core;
     ctx.lineJoin='round';ctx.lineCap='round';ctx.textAlign='center';
     for(const s of seg.segs){
       if(s.tEnd<view.t0)continue;
-      if(s.tone===0&&s.pts.length<3)continue;
+      if(s.tone===0&&s.pts.length<2)continue;
       const col=s.tone?C[s.tone]:C.ink;let top=Infinity;
       ctx.strokeStyle=col;ctx.lineWidth=3.5;ctx.beginPath();
       s.pts.forEach((p,i)=>{const x=X(p.t),y=Y(L(p.st));if(y<top)top=y;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
@@ -353,7 +354,7 @@ if(typeof module!=='undefined')module.exports=Core;
   async function startLive(){
     let st;
     try{
-      st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+      st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});
     }catch(e){
       status('The browser refused the microphone ('+(e&&e.name||'error')+'). Allow it in the site settings and press Start again, or use a recording.');
       return;
@@ -364,7 +365,7 @@ if(typeof module!=='undefined')module.exports=Core;
     an=ac.createAnalyser();an.fftSize=ac.sampleRate>=32000?4096:2048;an.smoothingTimeConstant=0;
     ac.createMediaStreamSource(stream).connect(an);
     buf=new Float32Array(an.fftSize);
-    clearAll('Recent syllables');setTag('Live');mode='live';tStart=performance.now()/1000;
+    clearAll('Recent syllables');setTag('Live');mode='live';noise=null;tStart=performance.now()/1000;
     $('start').hidden=true;$('stop').hidden=false;
     status('Listening. Say a few words so the page learns your range, then try single syllables.');
     raf=requestAnimationFrame(tick);
@@ -380,8 +381,10 @@ if(typeof module!=='undefined')module.exports=Core;
   function tick(){
     if(mode!=='live')return;
     an.getFloatTimeDomainData(buf);
-    const r=Core.detectPitch(buf,ac.sampleRate,0.006),t=performance.now()/1000-tStart;
-    $('lvl').style.width=Math.min(100,r.rms*700)+'%';
+    const gate=noise==null?0.0005:Math.max(0.0005,noise*2.2);
+    const r=Core.detectPitch(buf,ac.sampleRate,gate),t=performance.now()/1000-tStart;
+    noise=noise==null?r.rms:(r.rms<noise?noise*0.9+r.rms*0.1:noise*1.0005+1e-7);
+    $('lvl').style.width=clamp((20*Math.log10(r.rms+1e-9)+75)/60*100,0,100)+'%';
     q.push(r.f0?Core.hzToSt(r.f0):null);if(q.length>5)q.shift();
     const st=Core.med5(q);
     if(st!=null){

@@ -115,6 +115,7 @@ ul.notes{margin:0;padding-left:18px;color:var(--muted);font-size:13px;max-width:
   <ul class="notes">
     <li>Height is pitch relative to your own voice: 1 is the bottom of your range, 5 is the top. The page learns your range as you talk.</li>
     <li>The line is measured. The tone label on each syllable is a guess from the shape of the line.</li>
+    <li>Pitch is tracked with the raw autocorrelation method from Praat (Boersma 1993), using Praat's standard thresholds.</li>
     <li>Leave a short pause between syllables to get one label per syllable. Run-together speech shows as one long line.</li>
   </ul>
 </main>
@@ -122,36 +123,73 @@ ul.notes{margin:0;padding-left:18px;color:var(--muted);font-size:13px;max-width:
 <script id="core">
 /* Signal code with no page dependencies: pitch detection, range, syllable segmentation, tone guess. */
 const Core=(()=>{
-  const FMIN=65,FMAX=520,TH=0.15,GAP=0.09,JUMP=6,MIN_DUR=0.09;
+  /* Pitch: Praat's raw autocorrelation method (Boersma 1993) with Praat's standard path settings. */
+  const FLOOR=70,CEIL=600,ST=0.03,VT=0.45,OC=0.01,OJ=0.35,VUV=0.14,WIN=3/FLOOR;
+  const GAP=0.05,JUMP=7,MIN_DUR=0.045;
   const hzToSt=f=>12*Math.log2(f/55), stToHz=s=>55*Math.pow(2,s/12);
-  let xb=null,db=null;
-
-  /* YIN pitch detector on a buffer decimated to about 16 kHz. Returns f0 = 0 when unvoiced. */
-  function detectPitch(buf,sr,rmsMin){
-    const k=Math.max(1,Math.floor(sr/16000)),n=Math.floor(buf.length/k);
-    if(!xb||xb.length!==n)xb=new Float32Array(n);
-    const x=xb;let ss=0;
-    for(let i=0;i<n;i++){let s=0;const o=i*k;for(let j=0;j<k;j++)s+=buf[o+j];s/=k;x[i]=s;ss+=s*s}
-    const rms=Math.sqrt(ss/n);
-    if(rms<rmsMin)return{f0:0,rms};
-    const fs=sr/k,tMin=Math.max(2,Math.floor(fs/FMAX)),tMax=Math.min(Math.ceil(fs/FMIN),(n>>1)-1),W=n-tMax;
-    if(!db||db.length!==tMax+2)db=new Float32Array(tMax+2);
-    const d=db;let run=0;d[0]=1;
-    for(let tau=1;tau<=tMax;tau++){
-      let s=0;for(let i=0;i<W;i++){const q=x[i]-x[i+tau];s+=q*q}
-      run+=s;d[tau]=run>0?s*tau/run:1;
-    }
-    let tau=-1;
-    for(let t=tMin;t<tMax;t++){if(d[t]<TH){while(t+1<tMax&&d[t+1]<d[t])t++;tau=t;break}}
-    if(tau<0){let best=tMin;for(let t=tMin;t<tMax;t++)if(d[t]<d[best])best=t;if(d[best]<0.3&&best>tMin)tau=best}
-    if(tau<0)return{f0:0,rms};
-    const a=d[tau-1],b=d[tau],c=d[tau+1],den=a-2*b+c;
-    return{f0:fs/(den?tau+(a-c)/(2*den):tau),rms};
+  let wn=0,xb=null,wv=null,rw=null,rb=null;
+  function prep(n){
+    if(wn===n)return;wn=n;xb=new Float32Array(n);wv=new Float32Array(n);rw=new Float32Array(n>>1);rb=new Float32Array((n>>1)+2);
+    for(let i=0;i<n;i++)wv[i]=0.5-0.5*Math.cos(2*Math.PI*(i+0.5)/n);
+    /* Autocorrelation of the Hann window itself, used to undo the window's taper. */
+    for(let t=0;t<rw.length;t++){const x=t/n;rw[t]=(1-x)*(2/3+Math.cos(2*Math.PI*x)/3)+Math.sin(2*Math.PI*x)/(2*Math.PI)}
   }
 
-  function median(v){const s=v.slice().sort((a,b)=>a-b),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2}
-  /* Median of the voiced values in a 5-frame window; null unless at least 3 are voiced. */
-  function med5(win){const v=win.filter(x=>x!=null);return v.length>=3?median(v):null}
+  /* One frame: returns loudness plus pitch candidates {f, r}, r = normalized autocorrelation peak height. */
+  function candidates(buf,sr){
+    const k=Math.max(1,Math.floor(sr/16000)),n=Math.floor(buf.length/k),fs=sr/k;prep(n);
+    const x=xb;let mean=0;
+    for(let i=0;i<n;i++){let s=0;const o=i*k;for(let j=0;j<k;j++)s+=buf[o+j];s/=k;x[i]=s;mean+=s}
+    mean/=n;let ss=0,peak=0,r0=0;
+    for(let i=0;i<n;i++){const v=x[i]-mean;ss+=v*v;const a=v<0?-v:v;if(a>peak)peak=a;const w=v*wv[i];x[i]=w;r0+=w*w}
+    const out={rms:Math.sqrt(ss/n),peak,cands:[]};
+    if(r0<=0)return out;
+    const tMin=Math.max(2,Math.floor(fs/CEIL)),tMax=Math.min(Math.ceil(fs/FLOOR),(n>>1)-2),r=rb;
+    for(let t=tMin-1;t<=tMax+1;t++){let s=0;const m=n-t;for(let i=0;i<m;i++)s+=x[i]*x[i+t];r[t]=s/r0/rw[t]}
+    for(let t=tMin;t<=tMax;t++){
+      if(r[t]>0.2&&r[t]>r[t-1]&&r[t]>=r[t+1]){
+        const a=r[t-1],b=r[t],c=r[t+1],den=a-2*b+c,dx=den?0.5*(a-c)/den:0;
+        out.cands.push({f:fs/(t+dx),r:Math.min(1,b-0.25*(a-c)*dx)});
+      }
+    }
+    out.cands.sort((p,q)=>q.r-p.r);if(out.cands.length>8)out.cands.length=8;
+    return out;
+  }
+  /* Strength of the "no voice here" option for a frame, given its peak and the loudest peak heard. */
+  const unvoiced=(peak,gpk)=>VT+Math.max(0,2-(gpk>0?peak/gpk:0)/(ST/(1+VT)));
+
+  /* Cheapest path through the candidates over time (Viterbi). lag = frames of look-ahead before deciding. */
+  class Path{
+    constructor(lag){this.lag=lag;this.fr=[]}
+    push(t,cands,u,dt){
+      const corr=0.01/Math.max(0.005,Math.min(0.05,dt));
+      const c=[{f:0,s:u}];for(const q of cands)c.push({f:q.f,s:q.r+OC*Math.log2(q.f/FLOOR)});
+      const prev=this.fr.length?this.fr[this.fr.length-1].c:null;let top=-Infinity;
+      for(const cur of c){
+        if(!prev){cur.sc=cur.s;cur.bk=-1}
+        else{
+          let best=-Infinity,bi=0;
+          for(let j=0;j<prev.length;j++){
+            const p=prev[j],tc=(!p.f&&!cur.f)?0:(!p.f||!cur.f)?VUV:OJ*Math.abs(Math.log2(p.f/cur.f));
+            const v=p.sc-tc*corr;if(v>best){best=v;bi=j}
+          }
+          cur.sc=best+cur.s;cur.bk=bi;
+        }
+        if(cur.sc>top)top=cur.sc;
+      }
+      for(const cur of c)cur.sc-=top;
+      this.fr.push({t,c});
+      if(this.fr.length>this.lag){const o=this.trace()[0];this.fr.shift();return o}
+      return null;
+    }
+    trace(){
+      const n=this.fr.length,out=new Array(n);if(!n)return out;
+      const last=this.fr[n-1].c;let i=0;for(let j=1;j<last.length;j++)if(last[j].sc>last[i].sc)i=j;
+      for(let k=n-1;k>=0;k--){const e=this.fr[k].c[i];out[k]={t:this.fr[k].t,f:e.f};i=e.bk}
+      return out;
+    }
+    flush(){const o=this.trace();this.fr=[];return o}
+  }
 
   function calcRange(hist){
     const n=hist.length;
@@ -172,7 +210,7 @@ const Core=(()=>{
     const m=v.length,q=Math.max(1,Math.round(m*0.25)),mean=z=>z.reduce((p,c)=>p+c,0)/z.length;
     const s=mean(v.slice(0,q)),e=mean(v.slice(m-q));
     let mn=Infinity,mi=0;for(let i=0;i<m;i++)if(v[i]<mn){mn=v[i];mi=i}
-    const pos=mi/(m-1),L=x=>1+4*(x-lo)/(hi-lo),delta=e-s;
+    const pos=m>1?mi/(m-1):0,L=x=>1+4*(x-lo)/(hi-lo),delta=e-s;
     const dipL=Math.max(...v.slice(0,mi+1))-mn,dipR=Math.max(...v.slice(mi))-mn;
     if(dipL>=1&&dipR>=1.5&&pos>0.15&&pos<0.85&&L(mn)<=2.6)return 3;
     if(delta>=2)return 2;
@@ -192,28 +230,27 @@ const Core=(()=>{
     }
     finish(){
       const c=this.cur;this.cur=null;if(!c)return;
-      if(c.tEnd-c.t0<MIN_DUR||c.pts.length<5){this.segs.splice(this.segs.indexOf(c),1);return}
+      if(c.tEnd-c.t0<MIN_DUR||c.pts.length<3){this.segs.splice(this.segs.indexOf(c),1);return}
       const r=this.getRange();c.tone=classify(c.pts,r.lo,r.hi);c.lo=r.lo;c.hi=r.hi;
       if(this.onDone)this.onDone(c);
     }
     prune(tMin){this.segs=this.segs.filter(s=>s===this.cur||s.tEnd>=tMin)}
   }
 
-  /* Whole-clip analysis: returns per-frame semitone values (null = unvoiced) at a 10 ms hop. */
+  /* Whole-clip analysis: per-frame semitone values (null = unvoiced) at a 10 ms step. */
   function analyzeClip(data,sr,maxDur){
-    const N=Math.min(data.length,Math.floor(maxDur*sr));
-    let peak=0;for(let i=0;i<N;i++){const a=Math.abs(data[i]);if(a>peak)peak=a}
-    const g=peak>0?0.9/peak:1,len=Math.round(0.07*sr),hop=Math.round(0.01*sr),fr=new Float32Array(len),raw=[];
+    const N=Math.min(data.length,Math.floor(maxDur*sr)),len=Math.round(WIN*sr),hop=Math.round(0.01*sr),all=[];
+    let gpk=0;
     for(let o=0;o+len<=N;o+=hop){
-      for(let i=0;i<len;i++)fr[i]=data[o+i]*g;
-      const r=detectPitch(fr,sr,0.012);
-      raw.push(r.f0?hzToSt(r.f0):null);
+      const c=candidates(data.subarray(o,o+len),sr);c.t=(o+len/2)/sr;
+      if(c.peak>gpk)gpk=c.peak;all.push(c);
     }
-    const out=raw.map((_,i)=>({t:(i*hop+len/2)/sr,st:med5(raw.slice(Math.max(0,i-2),i+3))}));
-    return{frames:out,duration:N/sr};
+    const path=new Path(1e9);
+    for(const c of all)path.push(c.t,c.cands,unvoiced(c.peak,gpk),0.01);
+    return{frames:path.flush().map(o=>({t:o.t,st:o.f?hzToSt(o.f):null})),duration:N/sr};
   }
 
-  return{hzToSt,stToHz,detectPitch,med5,calcRange,classify,Segmenter,analyzeClip};
+  return{hzToSt,stToHz,candidates,unvoiced,Path,calcRange,classify,Segmenter,analyzeClip};
 })();
 if(typeof module!=='undefined')module.exports=Core;
 </script>
@@ -240,7 +277,7 @@ if(typeof module!=='undefined')module.exports=Core;
   let R=Core.calcRange([]),Rt=R;         // displayed range, target range
   let hist=[],sinceRange=0;
   let view={t0:0,t1:4.4};
-  let seg=null,ac=null,an=null,stream=null,buf=null,tStart=0,q=[],raf=0,noise=null;
+  let seg=null,ac=null,an=null,stream=null,buf=null,tStart=0,raf=0,noise=null,gpk=0,lastT=0,path=null,saved=null;
   let C={},dpr=1,fontBody='sans-serif';
 
   /* ---------- colors and sizing ---------- */
@@ -331,7 +368,7 @@ if(typeof module!=='undefined')module.exports=Core;
     seg=new Core.Segmenter(()=>Rt,s=>{addHist(s);markRef(s.tone)});
   }
   function clearAll(title){
-    hist=[];sinceRange=0;q=[];R=Rt=Core.calcRange([]);newSegmenter();
+    hist=[];sinceRange=0;R=Rt=Core.calcRange([]);newSegmenter();
     $('hist').textContent='';$('histTitle').textContent=title;markRef(0);
     $('rHz').textContent=$('rLv').textContent=$('rRg').textContent='–';
   }
@@ -362,10 +399,10 @@ if(typeof module!=='undefined')module.exports=Core;
     stopLive();stream=st;
     ac=new (window.AudioContext||window.webkitAudioContext)();
     try{await ac.resume()}catch(e){}
-    an=ac.createAnalyser();an.fftSize=ac.sampleRate>=32000?4096:2048;an.smoothingTimeConstant=0;
+    an=ac.createAnalyser();an.fftSize=ac.sampleRate>=32000?2048:1024;an.smoothingTimeConstant=0;
     ac.createMediaStreamSource(stream).connect(an);
     buf=new Float32Array(an.fftSize);
-    clearAll('Recent syllables');setTag('Live');mode='live';noise=null;tStart=performance.now()/1000;
+    clearAll('Recent syllables');setTag('Live');mode='live';noise=null;gpk=0;lastT=0;path=new Core.Path(3);if(saved){R=Rt=saved;showRange()}tStart=performance.now()/1000;
     $('start').hidden=true;$('stop').hidden=false;
     status('Listening. Say a few words so the page learns your range, then try single syllables.');
     raf=requestAnimationFrame(tick);
@@ -375,25 +412,33 @@ if(typeof module!=='undefined')module.exports=Core;
     if(stream)stream.getTracks().forEach(t=>t.stop());
     if(ac)ac.close().catch(()=>{});
     stream=ac=an=null;$('lvl').style.width='0';
-    if(mode==='live'){seg.finish();mode='idle';setTag('Paused');draw()}
+    if(mode==='live'){if(path)path.flush().forEach(feed);seg.finish();mode='idle';setTag('Paused');draw()}
     if(micOK){$('start').hidden=false;$('stop').hidden=true}
+  }
+  function feed(o){
+    const st=o.f?Core.hzToSt(o.f):null;
+    if(st!=null){
+      hist.push(st);if(hist.length>4000)hist.splice(0,1000);
+      if(++sinceRange>=15||hist.length<4){
+        sinceRange=0;Rt=(hist.length<25&&saved)?saved:Core.calcRange(hist);showRange();
+        if(hist.length>=200){saved=Rt;try{localStorage.setItem(KEY,JSON.stringify(Rt))}catch(e){}}
+      }
+      $('rHz').textContent=Math.round(o.f)+' Hz';
+      $('rLv').textContent=clamp(1+4*(st-Rt.lo)/(Rt.hi-Rt.lo),0.5,5.5).toFixed(1);
+    }else{$('rHz').textContent=$('rLv').textContent='–'}
+    seg.push(o.t,st);
   }
   function tick(){
     if(mode!=='live')return;
     an.getFloatTimeDomainData(buf);
+    const c=Core.candidates(buf,ac.sampleRate),t=performance.now()/1000-tStart;
     const gate=noise==null?0.0005:Math.max(0.0005,noise*2.2);
-    const r=Core.detectPitch(buf,ac.sampleRate,gate),t=performance.now()/1000-tStart;
-    noise=noise==null?r.rms:(r.rms<noise?noise*0.9+r.rms*0.1:noise*1.0005+1e-7);
-    $('lvl').style.width=clamp((20*Math.log10(r.rms+1e-9)+75)/60*100,0,100)+'%';
-    q.push(r.f0?Core.hzToSt(r.f0):null);if(q.length>5)q.shift();
-    const st=Core.med5(q);
-    if(st!=null){
-      hist.push(st);if(hist.length>4000)hist.splice(0,1000);
-      if(++sinceRange>=15||hist.length<4){sinceRange=0;Rt=Core.calcRange(hist);showRange()}
-      $('rHz').textContent=Math.round(Core.stToHz(st))+' Hz';
-      $('rLv').textContent=clamp(1+4*(st-Rt.lo)/(Rt.hi-Rt.lo),0.5,5.5).toFixed(1);
-    }else{$('rHz').textContent=$('rLv').textContent='–'}
-    seg.push(t,st);
+    noise=noise==null?c.rms:(c.rms<noise?noise*0.9+c.rms*0.1:noise*1.0005+1e-7);
+    if(c.rms<gate)c.cands=[];
+    gpk=Math.max(c.peak,gpk*0.9995);
+    $('lvl').style.width=clamp((20*Math.log10(c.rms+1e-9)+75)/60*100,0,100)+'%';
+    const o=path.push(t,c.cands,Core.unvoiced(c.peak,gpk),t-lastT);lastT=t;
+    if(o)feed(o);
     R={lo:R.lo+(Rt.lo-R.lo)*0.12,hi:R.hi+(Rt.hi-R.hi)*0.12};
     view={t0:t-5,t1:t};seg.prune(t-6);
     draw();raf=requestAnimationFrame(tick);
@@ -422,6 +467,8 @@ if(typeof module!=='undefined')module.exports=Core;
   }
 
   /* ---------- wiring ---------- */
+  const KEY='tone-visualizer-range';
+  try{const v=JSON.parse(localStorage.getItem(KEY));if(v&&isFinite(v.lo)&&isFinite(v.hi)&&v.hi-v.lo>=8)saved={lo:v.lo,hi:v.hi}}catch(e){}
   let inFrame=true;try{inFrame=window.self!==window.top}catch(e){}
   const micOK=!inFrame&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
   readTokens();buildRef();demo();
@@ -435,8 +482,9 @@ if(typeof module!=='undefined')module.exports=Core;
   $('stop').addEventListener('click',()=>{stopLive();status('Paused. Press Start microphone to continue.')});
   $('clip').addEventListener('change',e=>{const f=e.target.files[0];if(f)analyzeFile(f);e.target.value=''});
   $('recal').addEventListener('click',()=>{
+    saved=null;try{localStorage.removeItem(KEY)}catch(e){}
     if(mode==='live'){hist=[];sinceRange=0;Rt=Core.calcRange([]);status('Voice range reset. Keep talking to set it again.')}
-    else status('Voice range resets apply while the microphone is on.');
+    else status('Saved voice range cleared. It is learned again the next time the microphone is on.');
   });
   new ResizeObserver(resize).observe(cv);
   const retheme=()=>{readTokens();draw()};

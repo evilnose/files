@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mandarin Tone Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one instrument panel (the pitch scope) on top, its legend and history stacked below. */
+:root{
+  --bg:#eef1f6; --surface:#ffffff; --ink:#172033; --muted:#5c6880; --line:#d5dbe6; --grid:#e3e8f0;
+  --t1:#2563d9; --t2:#0f8f63; --t3:#b86a00; --t4:#cf2f6e;
+  --btn:#1d2a44; --btn-ink:#ffffff;
+  --display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1320; --surface:#161d2e; --ink:#e9edf6; --muted:#97a3bb; --line:#2a344b; --grid:#222c42;
+    --t1:#6ea4ff; --t2:#3fd09c; --t3:#f2a93b; --t4:#ff6fa3;
+    --btn:#e9edf6; --btn-ink:#0e1320;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1320; --surface:#161d2e; --ink:#e9edf6; --muted:#97a3bb; --line:#2a344b; --grid:#222c42;
+  --t1:#6ea4ff; --t2:#3fd09c; --t3:#f2a93b; --t4:#ff6fa3;
+  --btn:#e9edf6; --btn-ink:#0e1320;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+main{max-width:820px;margin:0 auto;padding:20px 16px 32px;display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-weight:600;font-size:15px;margin:0 0 8px;letter-spacing:.01em}
+p{margin:0}
+.lede{color:var(--muted);margin-top:6px;max-width:60ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}
+.scope{position:relative;height:280px}
+.scope canvas{display:block;width:100%;height:100%}
+.tag{position:absolute;top:0;right:0;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 9px;background:var(--surface)}
+.readouts{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.readouts div{display:flex;gap:6px;align-items:baseline}
+.readouts span{color:var(--muted);font-size:12px}
+.readouts b{font-weight:600;min-width:3.2em}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{font:inherit;font-weight:600;border-radius:9px;padding:10px 14px;border:1px solid var(--btn);background:var(--btn);color:var(--btn-ink);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn:focus-visible,#clip:focus-visible+label{outline:3px solid var(--t1);outline-offset:2px}
+.btn[hidden]{display:none}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.meter{flex:1 1 90px;min-width:70px;height:6px;border-radius:3px;background:var(--grid);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--muted)}
+.status{color:var(--muted);font-size:13px;margin-top:8px;min-height:1.4em}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.card{flex:1 1 76px;min-width:76px;max-width:120px;border:1px solid var(--line);border-radius:10px;padding:6px 6px 5px;display:flex;flex-direction:column;gap:2px;align-items:center;text-align:center}
+.card svg{width:100%;height:44px;display:block}
+.card .big{font-weight:600;font-size:15px}
+.card small{color:var(--muted);font-size:12px;line-height:1.25}
+.card[data-tone="1"]{--tc:var(--t1)} .card[data-tone="2"]{--tc:var(--t2)}
+.card[data-tone="3"]{--tc:var(--t3)} .card[data-tone="4"]{--tc:var(--t4)}
+.card path{stroke:var(--tc);fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.card .big{color:var(--tc)}
+.ref .card{max-width:none}
+.ref .card[aria-current="true"]{border-color:var(--tc);box-shadow:inset 0 0 0 1px var(--tc)}
+ul.notes{margin:0;padding-left:18px;color:var(--muted);font-size:13px;max-width:65ch;display:flex;flex-direction:column;gap:4px}
+@media (min-width:640px){.scope{height:340px} h1{font-size:32px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mandarin Tone Visualizer</h1>
+    <p class="lede">The only difference between mā, má, mǎ and mà is how the pitch moves. Speak, and the line draws that movement.</p>
+  </header>
+
+  <section class="panel" aria-label="Pitch scope">
+    <div class="scope">
+      <canvas id="cv" role="img" aria-label="Pitch over time on a 1 to 5 scale"></canvas>
+      <div class="tag" id="tag">Example</div>
+    </div>
+    <div class="readouts">
+      <div><span>Pitch</span><b id="rHz">–</b></div>
+      <div><span>Height (1–5)</span><b id="rLv">–</b></div>
+      <div><span>Voice range</span><b id="rRg">–</b></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="controls">
+      <button class="btn" id="start" type="button">Start microphone</button>
+      <button class="btn" id="stop" type="button" hidden>Stop</button>
+      <input class="vh" id="clip" type="file" accept="audio/*,video/*">
+      <label class="btn ghost" for="clip" id="clipLabel">Use a recording</label>
+      <button class="btn ghost" id="recal" type="button">Reset voice range</button>
+      <div class="meter" aria-hidden="true"><i id="lvl"></i></div>
+    </div>
+    <p class="status" id="status" aria-live="polite"></p>
+  </section>
+
+  <section class="panel">
+    <h2>The four shapes to look for</h2>
+    <div class="row ref" id="ref"></div>
+  </section>
+
+  <section class="panel">
+    <h2 id="histTitle">Recent syllables (example)</h2>
+    <div class="row" id="hist"></div>
+  </section>
+
+  <ul class="notes">
+    <li>Height is pitch relative to your own voice: 1 is the bottom of your range, 5 is the top. The page learns your range as you talk.</li>
+    <li>The line is measured. The tone label on each syllable is a guess from the shape of the line.</li>
+    <li>Leave a short pause between syllables to get one label per syllable. Run-together speech shows as one long line.</li>
+  </ul>
+</main>
+
+<script id="core">
+/* Signal code with no page dependencies: pitch detection, range, syllable segmentation, tone guess. */
+const Core=(()=>{
+  const FMIN=65,FMAX=520,TH=0.15,GAP=0.09,JUMP=6,MIN_DUR=0.09;
+  const hzToSt=f=>12*Math.log2(f/55), stToHz=s=>55*Math.pow(2,s/12);
+  let xb=null,db=null;
+
+  /* YIN pitch detector on a buffer decimated to about 16 kHz. Returns f0 = 0 when unvoiced. */
+  function detectPitch(buf,sr,rmsMin){
+    const k=Math.max(1,Math.floor(sr/16000)),n=Math.floor(buf.length/k);
+    if(!xb||xb.length!==n)xb=new Float32Array(n);
+    const x=xb;let ss=0;
+    for(let i=0;i<n;i++){let s=0;const o=i*k;for(let j=0;j<k;j++)s+=buf[o+j];s/=k;x[i]=s;ss+=s*s}
+    const rms=Math.sqrt(ss/n);
+    if(rms<rmsMin)return{f0:0,rms};
+    const fs=sr/k,tMin=Math.max(2,Math.floor(fs/FMAX)),tMax=Math.min(Math.ceil(fs/FMIN),(n>>1)-1),W=n-tMax;
+    if(!db||db.length!==tMax+2)db=new Float32Array(tMax+2);
+    const d=db;let run=0;d[0]=1;
+    for(let tau=1;tau<=tMax;tau++){
+      let s=0;for(let i=0;i<W;i++){const q=x[i]-x[i+tau];s+=q*q}
+      run+=s;d[tau]=run>0?s*tau/run:1;
+    }
+    let tau=-1;
+    for(let t=tMin;t<tMax;t++){if(d[t]<TH){while(t+1<tMax&&d[t+1]<d[t])t++;tau=t;break}}
+    if(tau<0)return{f0:0,rms};
+    const a=d[tau-1],b=d[tau],c=d[tau+1],den=a-2*b+c;
+    return{f0:fs/(den?tau+(a-c)/(2*den):tau),rms};
+  }
+
+  function median(v){const s=v.slice().sort((a,b)=>a-b),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2}
+  /* Median of the voiced values in a 5-frame window; null unless at least 3 are voiced. */
+  function med5(win){const v=win.filter(x=>x!=null);return v.length>=3?median(v):null}
+
+  function calcRange(hist){
+    const n=hist.length;
+    if(!n)return{lo:hzToSt(95),hi:hzToSt(240)};
+    const s=Array.from(hist).sort((a,b)=>a-b),p=q=>s[Math.min(n-1,Math.floor(q*n))];
+    let lo,hi;
+    if(n<25){const m=p(0.5);lo=m-5;hi=m+5}else{lo=p(0.05)-0.5;hi=p(0.95)+0.5}
+    if(hi-lo<8){const c=(lo+hi)/2;lo=c-4;hi=c+4}
+    return{lo,hi};
+  }
+
+  /* Tone guess from contour shape. pts: [{t,st}] in semitones; lo/hi: speaker range in semitones. */
+  function classify(pts,lo,hi){
+    const n=pts.length,a=Math.floor(n*0.1);
+    let v=pts.slice(a,n-a).map(p=>p.st);
+    if(v.length<4)v=pts.map(p=>p.st);
+    v=v.map((x,i)=>(v[Math.max(0,i-1)]+x+v[Math.min(v.length-1,i+1)])/3);
+    const m=v.length,q=Math.max(1,Math.round(m*0.25)),mean=z=>z.reduce((p,c)=>p+c,0)/z.length;
+    const s=mean(v.slice(0,q)),e=mean(v.slice(m-q));
+    let mn=Infinity,mi=0;for(let i=0;i<m;i++)if(v[i]<mn){mn=v[i];mi=i}
+    const pos=mi/(m-1),L=x=>1+4*(x-lo)/(hi-lo),delta=e-s;
+    const dipL=Math.max(...v.slice(0,mi+1))-mn,dipR=Math.max(...v.slice(mi))-mn;
+    if(dipL>=1&&dipR>=1.5&&pos>0.15&&pos<0.85&&L(mn)<=2.6)return 3;
+    if(delta>=2)return 2;
+    if(delta<=-3)return L(s)>=3?4:3;
+    return L(mean(v))>=2.8?1:3;
+  }
+
+  /* Groups voiced frames into syllables: a syllable ends at a silent gap or a pitch jump. */
+  class Segmenter{
+    constructor(getRange,onDone){this.getRange=getRange;this.onDone=onDone;this.segs=[];this.cur=null}
+    push(t,st){
+      const c=this.cur;
+      if(st==null){if(c&&t-c.tEnd>GAP)this.finish();return}
+      if(c&&(t-c.tEnd>GAP||Math.abs(st-c.last)>JUMP))this.finish();
+      if(!this.cur){this.cur={t0:t,tEnd:t,last:st,pts:[],tone:0};this.segs.push(this.cur)}
+      this.cur.pts.push({t,st});this.cur.tEnd=t;this.cur.last=st;
+    }
+    finish(){
+      const c=this.cur;this.cur=null;if(!c)return;
+      if(c.tEnd-c.t0<MIN_DUR||c.pts.length<5){this.segs.splice(this.segs.indexOf(c),1);return}
+      const r=this.getRange();c.tone=classify(c.pts,r.lo,r.hi);c.lo=r.lo;c.hi=r.hi;
+      if(this.onDone)this.onDone(c);
+    }
+    prune(tMin){this.segs=this.segs.filter(s=>s===this.cur||s.tEnd>=tMin)}
+  }
+
+  /* Whole-clip analysis: returns per-frame semitone values (null = unvoiced) at a 10 ms hop. */
+  function analyzeClip(data,sr,maxDur){
+    const N=Math.min(data.length,Math.floor(maxDur*sr));
+    let peak=0;for(let i=0;i<N;i++){const a=Math.abs(data[i]);if(a>peak)peak=a}
+    const g=peak>0?0.9/peak:1,len=Math.round(0.07*sr),hop=Math.round(0.01*sr),fr=new Float32Array(len),raw=[];
+    for(let o=0;o+len<=N;o+=hop){
+      for(let i=0;i<len;i++)fr[i]=data[o+i]*g;
+      const r=detectPitch(fr,sr,0.012);
+      raw.push(r.f0?hzToSt(r.f0):null);
+    }
+    const out=raw.map((_,i)=>({t:(i*hop+len/2)/sr,st:med5(raw.slice(Math.max(0,i-2),i+3))}));
+    return{frames:out,duration:N/sr};
+  }
+
+  return{hzToSt,stToHz,detectPitch,med5,calcRange,classify,Segmenter,analyzeClip};
+})();
+if(typeof module!=='undefined')module.exports=Core;
+</script>
+
+<script>
+(()=>{
+  const $=id=>document.getElementById(id);
+  const cv=$('cv'),ctx=cv.getContext('2d');
+  const TONES={
+    1:{short:'flat',name:'High and flat',py:'mā',hz:'妈',gloss:'mother'},
+    2:{short:'rise',name:'Rising',py:'má',hz:'麻',gloss:'hemp'},
+    3:{short:'dip',name:'Low, dipping',py:'mǎ',hz:'马',gloss:'horse'},
+    4:{short:'fall',name:'Falling',py:'mà',hz:'骂',gloss:'to scold'}
+  };
+  /* Textbook contours on the 1-5 scale (55, 35, 214, 51), u in 0..1. */
+  const SHAPE={
+    1:u=>4.9,
+    2:u=>3+2*Math.pow(u,1.3),
+    3:u=>u<0.45?2.2-1.2*Math.sin(Math.PI/2*u/0.45):1+2.8*(1-Math.cos(Math.PI/2*(u-0.45)/0.55)),
+    4:u=>5-4*u
+  };
+
+  let mode='demo';                       // demo | live | file | idle
+  let R=Core.calcRange([]),Rt=R;         // displayed range, target range
+  let hist=[],sinceRange=0;
+  let view={t0:0,t1:4.4};
+  let seg=null,ac=null,an=null,stream=null,buf=null,tStart=0,q=[],raf=0;
+  let C={},dpr=1,fontBody='sans-serif';
+
+  /* ---------- colors and sizing ---------- */
+  function readTokens(){
+    const s=getComputedStyle(document.documentElement),g=n=>s.getPropertyValue(n).trim();
+    C={ink:g('--ink'),muted:g('--muted'),grid:g('--grid'),line:g('--line'),surface:g('--surface'),
+       1:g('--t1'),2:g('--t2'),3:g('--t3'),4:g('--t4')};
+    fontBody=g('--body')||'sans-serif';
+  }
+  function resize(){
+    dpr=window.devicePixelRatio||1;
+    cv.width=Math.round(cv.clientWidth*dpr);cv.height=Math.round(cv.clientHeight*dpr);
+    draw();
+  }
+
+  /* ---------- drawing ---------- */
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  function draw(){
+    const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+    const pl=30,pr=12,pt=28,pb=12,ih=h-pt-pb,iw=w-pl-pr;
+    const Y=l=>pt+(5.5-l)/5*ih,X=t=>pl+(t-view.t0)/(view.t1-view.t0)*iw;
+    const L=st=>clamp(1+4*(st-R.lo)/(R.hi-R.lo),0.55,5.45);
+    ctx.lineWidth=1;ctx.font='12px '+fontBody;ctx.textBaseline='middle';
+    for(let l=1;l<=5;l++){
+      ctx.strokeStyle=C.grid;ctx.beginPath();ctx.moveTo(pl,Y(l)+.5);ctx.lineTo(w-pr,Y(l)+.5);ctx.stroke();
+      ctx.fillStyle=C.muted;ctx.textAlign='left';ctx.fillText(String(l),8,Y(l));
+    }
+    ctx.textAlign='left';ctx.fillStyle=C.muted;ctx.textBaseline='alphabetic';
+    ctx.fillText('high',8,Y(5)-12);ctx.fillText('low',8,Math.min(h-2,Y(1)+20));
+    if(!seg)return;
+    ctx.save();ctx.beginPath();ctx.rect(pl,0,iw+pr,h);ctx.clip();
+    ctx.lineJoin='round';ctx.lineCap='round';ctx.textAlign='center';
+    for(const s of seg.segs){
+      if(s.tEnd<view.t0)continue;
+      if(s.tone===0&&s.pts.length<3)continue;
+      const col=s.tone?C[s.tone]:C.ink;let top=Infinity;
+      ctx.strokeStyle=col;ctx.lineWidth=3.5;ctx.beginPath();
+      s.pts.forEach((p,i)=>{const x=X(p.t),y=Y(L(p.st));if(y<top)top=y;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+      ctx.stroke();
+      if(s.tone){
+        ctx.fillStyle=col;ctx.font='600 13px '+fontBody;
+        const label=s.label||(s.tone+' '+TONES[s.tone].short);
+        ctx.fillText(label,clamp(X((s.t0+s.tEnd)/2),pl+24,w-pr-24),Math.max(13,top-9));
+      }
+    }
+    if(mode==='live'&&seg.cur&&seg.cur.pts.length>=3){
+      const p=seg.cur.pts[seg.cur.pts.length-1],x=X(p.t),y=Y(L(p.st));
+      ctx.fillStyle=C.ink;ctx.globalAlpha=.18;ctx.beginPath();ctx.arc(x,y,10,0,6.3);ctx.fill();
+      ctx.globalAlpha=1;ctx.beginPath();ctx.arc(x,y,4.5,0,6.3);ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /* ---------- cards ---------- */
+  function pathFrom(pts,lo,hi){
+    const W=72,H=44,p=6,t0=pts[0].t,d=(pts[pts.length-1].t-t0)||1;
+    return pts.map((q,i)=>{
+      const l=clamp(1+4*(q.st-lo)/(hi-lo),0.7,5.3);
+      return(i?'L':'M')+(p+(q.t-t0)/d*(W-2*p)).toFixed(1)+' '+(p+(5.3-l)/4.6*(H-2*p)).toFixed(1);
+    }).join(' ');
+  }
+  function shapePts(tone,t0,dur,lo,hi){
+    const pts=[];for(let i=0;i<=30;i++){const u=i/30;pts.push({t:t0+u*dur,st:lo+(SHAPE[tone](u)-1)/4*(hi-lo)})}
+    return pts;
+  }
+  function card(tone,d,big,small){
+    const el=document.createElement('div');el.className='card';el.dataset.tone=tone;
+    el.innerHTML='<svg viewBox="0 0 72 44" aria-hidden="true"><path d="'+d+'"/></svg><div class="big"></div><small></small>';
+    el.children[1].textContent=big;el.children[2].textContent=small;return el;
+  }
+  function buildRef(){
+    const r=$('ref');
+    for(let t=1;t<=4;t++){
+      const T=TONES[t],c=card(t,pathFrom(shapePts(t,0,1,0,12),0,12),T.py+' '+T.hz,'Tone '+t+' · '+T.name+' · “'+T.gloss+'”');
+      c.id='ref'+t;r.appendChild(c);
+    }
+  }
+  function markRef(tone){for(let t=1;t<=4;t++)$('ref'+t).setAttribute('aria-current',String(t===tone))}
+  function addHist(s){
+    const hEl=$('hist');
+    hEl.appendChild(card(s.tone,pathFrom(s.pts,s.lo,s.hi),s.label||('Tone '+s.tone),TONES[s.tone].name));
+    while(hEl.children.length>8)hEl.removeChild(hEl.firstChild);
+  }
+
+  /* ---------- state ---------- */
+  function newSegmenter(){
+    seg=new Core.Segmenter(()=>Rt,s=>{addHist(s);markRef(s.tone)});
+  }
+  function clearAll(title){
+    hist=[];sinceRange=0;q=[];R=Rt=Core.calcRange([]);newSegmenter();
+    $('hist').textContent='';$('histTitle').textContent=title;markRef(0);
+    $('rHz').textContent=$('rLv').textContent=$('rRg').textContent='–';
+  }
+  function showRange(){$('rRg').textContent=Math.round(Core.stToHz(Rt.lo))+'–'+Math.round(Core.stToHz(Rt.hi))+' Hz'}
+  function status(t){$('status').textContent=t}
+  function setTag(t){$('tag').textContent=t;$('tag').hidden=!t}
+
+  function demo(){
+    mode='demo';clearAll('Recent syllables (example)');setTag('Example');
+    const lo=Core.hzToSt(100),hi=Core.hzToSt(200);R=Rt={lo,hi};view={t0:0,t1:4.4};
+    for(let t=1;t<=4;t++){
+      const pts=shapePts(t,0.35+(t-1)*1.02,0.6,lo,hi);
+      const s={t0:pts[0].t,tEnd:pts[30].t,pts,tone:t,lo,hi,label:TONES[t].py};
+      seg.segs.push(s);addHist(s);
+    }
+    markRef(0);draw();
+  }
+
+  /* ---------- live microphone ---------- */
+  async function startLive(){
+    let st;
+    try{
+      st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    }catch(e){
+      status('The browser refused the microphone ('+(e&&e.name||'error')+'). Allow it in the site settings and press Start again, or use a recording.');
+      return;
+    }
+    stopLive();stream=st;
+    ac=new (window.AudioContext||window.webkitAudioContext)();
+    try{await ac.resume()}catch(e){}
+    an=ac.createAnalyser();an.fftSize=ac.sampleRate>=32000?4096:2048;an.smoothingTimeConstant=0;
+    ac.createMediaStreamSource(stream).connect(an);
+    buf=new Float32Array(an.fftSize);
+    clearAll('Recent syllables');setTag('Live');mode='live';tStart=performance.now()/1000;
+    $('start').hidden=true;$('stop').hidden=false;
+    status('Listening. Say a few words so the page learns your range, then try single syllables.');
+    raf=requestAnimationFrame(tick);
+  }
+  function stopLive(){
+    cancelAnimationFrame(raf);
+    if(stream)stream.getTracks().forEach(t=>t.stop());
+    if(ac)ac.close().catch(()=>{});
+    stream=ac=an=null;$('lvl').style.width='0';
+    if(mode==='live'){seg.finish();mode='idle';setTag('Paused');draw()}
+    if(micOK){$('start').hidden=false;$('stop').hidden=true}
+  }
+  function tick(){
+    if(mode!=='live')return;
+    an.getFloatTimeDomainData(buf);
+    const r=Core.detectPitch(buf,ac.sampleRate,0.006),t=performance.now()/1000-tStart;
+    $('lvl').style.width=Math.min(100,r.rms*700)+'%';
+    q.push(r.f0?Core.hzToSt(r.f0):null);if(q.length>5)q.shift();
+    const st=Core.med5(q);
+    if(st!=null){
+      hist.push(st);if(hist.length>4000)hist.splice(0,1000);
+      if(++sinceRange>=15||hist.length<4){sinceRange=0;Rt=Core.calcRange(hist);showRange()}
+      $('rHz').textContent=Math.round(Core.stToHz(st))+' Hz';
+      $('rLv').textContent=clamp(1+4*(st-Rt.lo)/(Rt.hi-Rt.lo),0.5,5.5).toFixed(1);
+    }else{$('rHz').textContent=$('rLv').textContent='–'}
+    seg.push(t,st);
+    R={lo:R.lo+(Rt.lo-R.lo)*0.12,hi:R.hi+(Rt.hi-R.hi)*0.12};
+    view={t0:t-5,t1:t};seg.prune(t-6);
+    draw();raf=requestAnimationFrame(tick);
+  }
+
+  /* ---------- recorded clip ---------- */
+  const MAX_CLIP=12;
+  async function analyzeFile(file){
+    stopLive();status('Analyzing '+file.name+'…');
+    let audio;
+    try{
+      const ab=await file.arrayBuffer(),dc=new (window.AudioContext||window.webkitAudioContext)();
+      audio=await new Promise((ok,no)=>{const p=dc.decodeAudioData(ab,ok,no);if(p&&p.catch)p.catch(no)});
+      dc.close().catch(()=>{});
+    }catch(e){status('This file could not be decoded as audio. Try an m4a, mp3 or wav recording.');return}
+    await new Promise(r=>setTimeout(r,30));
+    const res=Core.analyzeClip(audio.getChannelData(0),audio.sampleRate,MAX_CLIP);
+    clearAll('Syllables in this clip');mode='file';setTag('Recording');
+    hist=res.frames.filter(f=>f.st!=null).map(f=>f.st);
+    if(hist.length<5){view={t0:0,t1:Math.max(2,res.duration)};draw();status('No clear voice pitch was found in this clip. Record closer to the microphone and try again.');return}
+    R=Rt=Core.calcRange(hist);showRange();
+    for(const f of res.frames)seg.push(f.t,f.st);
+    seg.finish();view={t0:0,t1:Math.max(2,res.duration)};draw();
+    const n=seg.segs.length;
+    status('Found '+n+' syllable'+(n===1?'':'s')+'.'+(audio.duration>MAX_CLIP?' Only the first '+MAX_CLIP+' seconds are shown.':''));
+  }
+
+  /* ---------- wiring ---------- */
+  let inFrame=true;try{inFrame=window.self!==window.top}catch(e){}
+  const micOK=!inFrame&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+  readTokens();buildRef();demo();
+  if(!micOK){
+    $('start').hidden=true;
+    status(inFrame
+      ?'Live microphone is not available in this view. Use a recording here: record yourself saying a few syllables (a voice memo or a short video) and choose that file. For live mode, open the downloaded copy of this page in a desktop browser.'
+      :'This browser only allows the microphone on https pages and local files. Use a recording instead.');
+  }else status('Press Start microphone, allow access, and speak.');
+  $('start').addEventListener('click',startLive);
+  $('stop').addEventListener('click',()=>{stopLive();status('Paused. Press Start microphone to continue.')});
+  $('clip').addEventListener('change',e=>{const f=e.target.files[0];if(f)analyzeFile(f);e.target.value=''});
+  $('recal').addEventListener('click',()=>{
+    if(mode==='live'){hist=[];sinceRange=0;Rt=Core.calcRange([]);status('Voice range reset. Keep talking to set it again.')}
+    else status('Voice range resets apply while the microphone is on.');
+  });
+  new ResizeObserver(resize).observe(cv);
+  const retheme=()=>{readTokens();draw()};
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change',retheme);
+  new MutationObserver(retheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(draw);
+})();
+</script>
+</body>
+</html>
